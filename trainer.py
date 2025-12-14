@@ -4,6 +4,7 @@ import time
 import numpy
 import ray
 import torch
+from tqdm import tqdm
 
 import models
 
@@ -57,6 +58,12 @@ class Trainer:
             self.optimizer.load_state_dict(
                 copy.deepcopy(initial_checkpoint["optimizer_state"])
             )
+        
+        # Early stopping parameters
+        self.best_loss = float('inf')
+        self.patience_counter = 0
+        self.early_stop_patience = self.config.early_stop_patience
+        self.early_stop_threshold = self.config.early_stop_threshold
 
     def continuous_update_weights(self, replay_buffer, shared_storage):
         # Wait for the replay buffer to be filled
@@ -65,6 +72,7 @@ class Trainer:
 
         next_batch = replay_buffer.get_batch.remote()
         # Training loop
+        pbar = tqdm(total=self.config.training_steps, initial=self.training_step, desc="Training")
         while self.training_step < self.config.training_steps and not ray.get(
             shared_storage.get_info.remote("terminate")
         ):
@@ -78,6 +86,16 @@ class Trainer:
                 reward_loss,
                 policy_loss,
             ) = self.update_weights(batch)
+            
+            # Update progress bar
+            pbar.update(1)
+            pbar.set_postfix({
+                'loss': f'{total_loss:.4f}',
+                'v_loss': f'{value_loss:.4f}',
+                'r_loss': f'{reward_loss:.4f}',
+                'p_loss': f'{policy_loss:.4f}',
+                'lr': f'{self.optimizer.param_groups[0]["lr"]:.6f}'
+            })
 
             if self.config.PER:
                 # Save new priorities in the replay buffer (See https://arxiv.org/abs/1803.00933)
@@ -105,6 +123,20 @@ class Trainer:
                     "policy_loss": policy_loss,
                 }
             )
+            
+            # Early stopping check
+            if self.early_stop_patience is not None:
+                if total_loss < self.best_loss - self.early_stop_threshold:
+                    self.best_loss = total_loss
+                    self.patience_counter = 0
+                    print(f"\nNew best loss: {self.best_loss:.6f}")
+                else:
+                    self.patience_counter += 1
+                    if self.patience_counter >= self.early_stop_patience:
+                        print(f"\nEarly stopping triggered! No improvement for {self.early_stop_patience} steps.")
+                        print(f"Best loss: {self.best_loss:.6f}, Current loss: {total_loss:.6f}")
+                        shared_storage.set_info.remote({"terminate": True})
+                        break
 
             # Managing the self-play / training ratio
             if self.config.training_delay:
@@ -120,6 +152,8 @@ class Trainer:
                     and not ray.get(shared_storage.get_info.remote("terminate"))
                 ):
                     time.sleep(0.5)
+        
+        pbar.close()
 
     def update_weights(self, batch):
         """

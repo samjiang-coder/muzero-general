@@ -297,6 +297,14 @@ class MuZero:
                     info["num_played_games"],
                     counter,
                 )
+                
+                # 每100盤保存一次模型
+                if hasattr(self.config, 'save_model_interval') and self.config.save_model:
+                    self.shared_storage_worker.save_checkpoint_by_games.remote()
+                
+                # 檢查並保存最優模型
+                if self.config.save_model:
+                    self.shared_storage_worker.save_best_model.remote()
                 writer.add_scalar(
                     "2.Workers/2.Training_steps", info["training_step"], counter
                 )
@@ -621,54 +629,40 @@ def load_model_menu(muzero, game_name):
 
 if __name__ == "__main__":
     if len(sys.argv) == 2:
-        # Train directly with: python muzero.py cartpole
+        # Train directly with: python muzero.py gomoku
         muzero = MuZero(sys.argv[1])
         muzero.train()
     elif len(sys.argv) == 3:
-        # Train directly with: python muzero.py cartpole '{"lr_init": 0.01}'
+        # Train directly with: python muzero.py gomoku '{"lr_init": 0.01}'
         config = json.loads(sys.argv[2])
         muzero = MuZero(sys.argv[1], config)
         muzero.train()
     else:
-        print("\nWelcome to MuZero! Here's a list of games:")
-        # Let user pick a game
-        games = [
-            filename.stem
-            for filename in sorted(list((pathlib.Path.cwd() / "games").glob("*.py")))
-            if filename.name != "abstract_game.py"
-        ]
-        for i in range(len(games)):
-            print(f"{i}. {games[i]}")
-        choice = input("Enter a number to choose the game: ")
-        valid_inputs = [str(i) for i in range(len(games))]
-        while choice not in valid_inputs:
-            choice = input("Invalid input, enter a number listed above: ")
-
-        # Initialize MuZero
-        choice = int(choice)
-        game_name = games[choice]
+        # Directly use gomoku
+        game_name = "gomoku"
+        print(f"\n歡迎使用 MuZero！正在初始化五子棋...")
         muzero = MuZero(game_name)
 
         while True:
             # Configure running options
             options = [
-                "Train",
-                "Load pretrained model",
-                "Diagnose model",
-                "Render some self play games",
-                "Play against MuZero",
-                "Test the game manually",
-                "Hyperparameter search",
-                "Exit",
+                "訓練",
+                "載入預訓練模型",
+                "診斷模型",
+                "渲染一些自我對弈遊戲",
+                "與 MuZero 對戰",
+                "手動測試遊戲",
+                "超參數搜索",
+                "退出",
             ]
             print()
             for i in range(len(options)):
                 print(f"{i}. {options[i]}")
 
-            choice = input("Enter a number to choose an action: ")
+            choice = input("輸入數字選擇操作: ")
             valid_inputs = [str(i) for i in range(len(options))]
             while choice not in valid_inputs:
-                choice = input("Invalid input, enter a number listed above: ")
+                choice = input("無效輸入，請輸入上面列出的數字: ")
             choice = int(choice)
             if choice == 0:
                 muzero.train()
@@ -689,7 +683,7 @@ if __name__ == "__main__":
                 while not done:
                     action = env.human_to_action()
                     observation, reward, done = env.step(action)
-                    print(f"\nAction: {env.action_to_string(action)}\nReward: {reward}")
+                    print(f"\n動作: {env.action_to_string(action)}\n獎勵: {reward}")
                     env.render()
             elif choice == 6:
                 # Define here the parameters to tune
@@ -707,6 +701,6 @@ if __name__ == "__main__":
                 muzero = MuZero(game_name, best_hyperparameters)
             else:
                 break
-            print("\nDone")
+            print("\n完成")
 
     ray.shutdown()

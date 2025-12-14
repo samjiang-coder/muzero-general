@@ -91,3 +91,9 @@ venv.bak/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+# Model checkpoints and training results
+*.checkpoint
+*.model
+results/**/model.checkpoint
+results/**/best_model.checkpoint

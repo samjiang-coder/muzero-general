@@ -1,4 +1,5 @@
 import datetime
+import json
 import math
 import pathlib
 
@@ -11,114 +12,129 @@ from .abstract_game import AbstractGame
 class MuZeroConfig:
     def __init__(self):
         # fmt: off
-        # More information is available here: https://github.com/werner-duvaud/muzero-general/wiki/Hyperparameter-Optimization
-
-        self.seed = 0  # Seed for numpy, torch and the game
-        self.max_num_gpus = None  # Fix the maximum number of GPUs to use. It's usually faster to use a single GPU (set it to 1) if it has enough memory. None will use every GPUs available
-
-
-
-        ### Game
-        self.observation_shape = (3, 11, 11)  # Dimensions of the game observation, must be 3 (channel, height, width). For a 1D array, please reshape it to (1, 1, length of array)
-        self.action_space = list(range(11 * 11))  # Fixed list of all possible actions. You should only edit the length
-        self.players = list(range(2))  # List of players. You should only edit the length
-        self.stacked_observations = 0  # Number of previous observations and previous actions to add to the current observation
-
-        # Evaluate
-        self.muzero_player = 0  # Turn Muzero begins to play (0: MuZero plays first, 1: MuZero plays second)
-        self.opponent = "random"  # Hard coded agent that MuZero faces to assess his progress in multiplayer games. It doesn't influence training. None, "random" or "expert" if implemented in the Game class
-
-
-
-        ### Self-Play
-        self.num_workers = 2  # Number of simultaneous threads/workers self-playing to feed the replay buffer
-        self.selfplay_on_gpu = False
-        self.max_moves = 121  # Maximum number of moves if game is not finished before
-        self.num_simulations = 400  # Number of future moves self-simulated
-        self.discount = 1  # Chronological discount of the reward
-        self.temperature_threshold = None  # Number of moves before dropping the temperature given by visit_softmax_temperature_fn to 0 (ie selecting the best action). If None, visit_softmax_temperature_fn is used every time
-
-        # Root prior exploration noise
+        # 更多資訊請參考: https://github.com/werner-duvaud/muzero-general/wiki/Hyperparameter-Optimization
+        
+        # 優先從 config.json 載入所有配置
+        # 以下為備用默認值，當 config.json 不存在時使用
+        self._set_defaults()
+        self._load_from_json()
+        self._update_dependent_params()
+        # fmt: on
+    
+    def _set_defaults(self):
+        """設置所有參數的默認值"""
+        self.seed = 0
+        self.max_num_gpus = 1
+        
+        # 遊戲設定
+        self.board_size = 9
+        self.stacked_observations = 0
+        self.muzero_player = "random"
+        self.opponent = "random"
+        
+        # 自我對弈
+        self.num_workers = 2
+        self.selfplay_on_gpu = True
+        self.max_moves = 81
+        self.num_simulations = 50
+        self.discount = 1
+        self.temperature_threshold = None
         self.root_dirichlet_alpha = 0.3
         self.root_exploration_fraction = 0.25
-
-        # UCB formula
         self.pb_c_base = 19652
         self.pb_c_init = 1.25
-
-
-
-        ### Network
-        self.network = "resnet"  # "resnet" / "fullyconnected"
-        self.support_size = 10  # Value and reward are scaled (with almost sqrt) and encoded on a vector with a range of -support_size to support_size. Choose it so that support_size <= sqrt(max(abs(discounted reward)))
         
-        # Residual Network
-        self.downsample = False  # Downsample observations before representation network, False / "CNN" (lighter) / "resnet" (See paper appendix Network Architecture)
-        self.blocks = 6  # Number of blocks in the ResNet
-        self.channels = 128  # Number of channels in the ResNet
-        self.reduced_channels_reward = 2  # Number of channels in reward head
-        self.reduced_channels_value = 2  # Number of channels in value head
-        self.reduced_channels_policy = 4  # Number of channels in policy head
-        self.resnet_fc_reward_layers = [64]  # Define the hidden layers in the reward head of the dynamic network
-        self.resnet_fc_value_layers = [64]  # Define the hidden layers in the value head of the prediction network
-        self.resnet_fc_policy_layers = [64]  # Define the hidden layers in the policy head of the prediction network
-        
-        # Fully Connected Network
+        # 神經網路
+        self.network = "resnet"
+        self.support_size = 10
+        self.downsample = False
+        self.blocks = 4
+        self.channels = 64
+        self.reduced_channels_reward = 2
+        self.reduced_channels_value = 2
+        self.reduced_channels_policy = 4
+        self.resnet_fc_reward_layers = [64]
+        self.resnet_fc_value_layers = [64]
+        self.resnet_fc_policy_layers = [64]
         self.encoding_size = 32
-        self.fc_representation_layers = []  # Define the hidden layers in the representation network
-        self.fc_dynamics_layers = [64]  # Define the hidden layers in the dynamics network
-        self.fc_reward_layers = [64]  # Define the hidden layers in the reward network
-        self.fc_value_layers = []  # Define the hidden layers in the value network
-        self.fc_policy_layers = []  # Define the hidden layers in the policy network
-
-
-
-        ### Training
-        self.results_path = pathlib.Path(__file__).resolve().parents[1] / "results" / pathlib.Path(__file__).stem / datetime.datetime.now().strftime("%Y-%m-%d--%H-%M-%S")  # Path to store the model weights and TensorBoard logs
-        self.save_model = True  # Save the checkpoint in results_path as model.checkpoint
-        self.training_steps = 10000  # Total number of training steps (ie weights update according to a batch)
-        self.batch_size = 512  # Number of parts of games to train on at each training step
-        self.checkpoint_interval = 50  # Number of training steps before using the model for self-playing
-        self.value_loss_weight = 1  # Scale the value loss to avoid overfitting of the value function, paper recommends 0.25 (See paper appendix Reanalyze)
-        self.train_on_gpu = torch.cuda.is_available()  # Train on GPU if available
-
-        self.optimizer = "Adam"  # "Adam" or "SGD". Paper uses SGD
-        self.weight_decay = 1e-4  # L2 weights regularization
-        self.momentum = 0.9  # Used only if optimizer is SGD
-
-        # Exponential learning rate schedule
-        self.lr_init = 0.002  # Initial learning rate
-        self.lr_decay_rate = 0.9  # Set it to 1 to use a constant learning rate
+        self.fc_representation_layers = []
+        self.fc_dynamics_layers = [64]
+        self.fc_reward_layers = [64]
+        self.fc_value_layers = []
+        self.fc_policy_layers = []
+        
+        # 訓練
+        self.save_model = True
+        self.training_steps = 10000
+        self.batch_size = 32
+        self.checkpoint_interval = 50
+        self.value_loss_weight = 1
+        self.optimizer = "Adam"
+        self.weight_decay = 1e-4
+        self.momentum = 0.9
+        self.lr_init = 0.002
+        self.lr_decay_rate = 0.9
         self.lr_decay_steps = 10000
+        
+        # 重放緩衝區
+        self.replay_buffer_size = 10000
+        self.num_unroll_steps = 81
+        self.td_steps = 81
+        self.PER = True
+        self.PER_alpha = 0.5
+        self.use_last_model_value = False
+        self.reanalyse_on_gpu = True
+        
+        # 早停
+        self.early_stop_patience = None
+        self.early_stop_threshold = 0.0001
+        
+        # 比例調整
+        self.self_play_delay = 0
+        self.training_delay = 0
+        self.ratio = 1
 
-
-
-        ### Replay Buffer
-        self.replay_buffer_size = 10000  # Number of self-play games to keep in the replay buffer
-        self.num_unroll_steps = 121  # Number of game moves to keep for every batch element
-        self.td_steps = 121  # Number of steps in the future to take into account for calculating the target value
-        self.PER = True  # Prioritized Replay (See paper appendix Training), select in priority the elements in the replay buffer which are unexpected for the network
-        self.PER_alpha = 0.5  # How much prioritization is used, 0 corresponding to the uniform case, paper suggests 1
-
-        # Reanalyze (See paper appendix Reanalyse)
-        self.use_last_model_value = False  # Use the last model to provide a fresher, stable n-step value (See paper appendix Reanalyze)
-        self.reanalyse_on_gpu = False
-
-
-
-        ### Adjust the self play / training ratio to avoid over/underfitting
-        self.self_play_delay = 0  # Number of seconds to wait after each played game
-        self.training_delay = 0  # Number of seconds to wait after each training step
-        self.ratio = 1  # Desired training steps per self played step ratio. Equivalent to a synchronous version, training can take much longer. Set it to None to disable it
-        # fmt: on
-
+    def _load_from_json(self):
+        """從 config.json 載入配置參數（如果文件存在）"""
+        config_path = pathlib.Path(__file__).resolve().parents[1] / "config.json"
+        if config_path.exists():
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config_data = json.load(f)
+                
+                # 更新配置參數（忽略以 _ 開頭的註解欄位）
+                for key, value in config_data.items():
+                    if not key.startswith('_'):
+                        setattr(self, key, value)
+                
+                print(f"✓ 已從 config.json 載入配置")
+            except Exception as e:
+                print(f"✗ 載入 config.json 時出錯: {e}")
+                print("  使用默認配置")
+        else:
+            print(f"✗ 找不到 config.json，使用默認配置")
+    
+    def _update_dependent_params(self):
+        """更新依賴於其他參數的配置"""
+        # 根據棋盤大小計算
+        self.observation_shape = (3, self.board_size, self.board_size)
+        self.action_space = list(range(self.board_size * self.board_size))
+        self.players = list(range(2))  # 固定為2人遊戲
+        
+        # 自動設置路徑
+        board_size_folder = f"{self.board_size}x{self.board_size}"
+        self.results_path = pathlib.Path(__file__).resolve().parents[1] / "results" / pathlib.Path(__file__).stem / board_size_folder / datetime.datetime.now().strftime("%Y-%m-%d--%H-%M-%S")
+        
+        # GPU 設置
+        self.train_on_gpu = torch.cuda.is_available()
+    
     def visit_softmax_temperature_fn(self, trained_steps):
         """
-        Parameter to alter the visit count distribution to ensure that the action selection becomes greedier as training progresses.
-        The smaller it is, the more likely the best action (ie with the highest visit count) is chosen.
+        用於改變訪問計數分佈的參數，以確保隨著訓練進展，動作選擇變得更加貪婪。
+        值越小，最佳動作 (即訪問計數最高的動作) 被選中的可能性越大。
 
         Returns:
-            Positive float.
+            正浮點數。
         """
         if trained_steps < 0.5 * self.training_steps:
             return 1.0
@@ -130,76 +146,77 @@ class MuZeroConfig:
 
 class Game(AbstractGame):
     """
-    Game wrapper.
+    遊戲包裝器。
     """
 
     def __init__(self, seed=None):
-        self.env = Gomoku()
+        # 從配置中獲取棋盤大小
+        config = MuZeroConfig()
+        self.env = Gomoku(board_size=config.board_size)
 
     def step(self, action):
         """
-        Apply action to the game.
+        對遊戲應用動作。
 
         Args:
-            action : action of the action_space to take.
+            action : 要執行的 action_space 中的動作。
 
         Returns:
-            The new observation, the reward and a boolean if the game has ended.
+            新的觀察、獎勵和表示遊戲是否結束的布林值。
         """
         observation, reward, done = self.env.step(action)
         return observation, reward, done
 
     def to_play(self):
         """
-        Return the current player.
+        返回當前玩家。
 
         Returns:
-            The current player, it should be an element of the players list in the config.
+            當前玩家，應該是配置中 players 列表的元素。
         """
         return self.env.to_play()
 
     def legal_actions(self):
         """
-        Should return the legal actions at each turn, if it is not available, it can return
-        the whole action space. At each turn, the game have to be able to handle one of returned actions.
+        應該返回每回合的合法動作，如果不可用，可以返回整個動作空間。
+        在每回合，遊戲必須能夠處理返回動作中的一個。
 
-        For complex game where calculating legal moves is too long, the idea is to define the legal actions
-        equal to the action space but to return a negative reward if the action is illegal.
+        對於計算合法移動耗時過長的複雜遊戲，可以將合法動作定義為等於動作空間，
+        但如果動作不合法則返回負獎勵。
 
         Returns:
-            An array of integers, subset of the action space.
+            整數陣列，動作空間的子集。
         """
         return self.env.legal_actions()
 
     def reset(self):
         """
-        Reset the game for a new game.
+        重置遊戲以開始新遊戲。
 
         Returns:
-            Initial observation of the game.
+            遊戲的初始觀察。
         """
         return self.env.reset()
 
     def close(self):
         """
-        Properly close the game.
+        正確關閉遊戲。
         """
         pass
 
     def render(self):
         """
-        Display the game observation.
+        顯示遊戲觀察。
         """
         self.env.render()
-        input("Press enter to take a step ")
+        input("按 Enter 鍵繼續下一步 ")
 
     def human_to_action(self):
         """
-        For multiplayer games, ask the user for a legal action
-        and return the corresponding action number.
+        對於多人遊戲，詢問用戶合法動作並返回對應的動作編號。
 
         Returns:
-            An integer from the action space.
+            來自動作空間的整數。
         """
         valid = False
         while not valid:
@@ -208,18 +225,18 @@ class Game(AbstractGame):
 
     def action_to_string(self, action):
         """
-        Convert an action number to a string representing the action.
+        將動作編號轉換為表示該動作的字串。
         Args:
-            action_number: an integer from the action space.
+            action_number: 來自動作空間的整數。
         Returns:
-            String representing the action.
+            表示該動作的字串。
         """
         return self.env.action_to_human_input(action)
 
 
 class Gomoku:
-    def __init__(self):
-        self.board_size = 11
+    def __init__(self, board_size=9):
+        self.board_size = board_size
         self.board = numpy.zeros((self.board_size, self.board_size), dtype="int32")
         self.player = 1
         self.board_markers = [
@@ -250,7 +267,7 @@ class Gomoku:
     def get_observation(self):
         board_player1 = numpy.where(self.board == 1, 1.0, 0.0)
         board_player2 = numpy.where(self.board == -1, 1.0, 0.0)
-        board_to_play = numpy.full((11, 11), self.player, dtype="int32")
+        board_to_play = numpy.full((self.board_size, self.board_size), self.player, dtype="int32")
         return numpy.array([board_player1, board_player2, board_to_play])
 
     def legal_actions(self):

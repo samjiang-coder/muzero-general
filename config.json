@@ -1,0 +1,177 @@
+{
+  "_comment": "========================================",
+  "_comment2": "   MuZero 五子棋訓練配置文件",
+  "_comment3": "   修改這些參數來調整訓練行為",
+  "_comment4": "   以 _ 開頭的欄位為註解，不會被讀取",
+  "_comment5": "========================================",
+  
+  "_對弈模型設定": "██████████████████",
+  "_對弈說明": "↓ 這些參數用於 UI 對弈，不影響訓練 ↓",
+  
+  "play_model_path": null,
+  "_play_model_path說明": "對弈時載入的模型路徑，null=使用最新訓練的模型，例如: 'results/gomoku/9x9/2025-12-14--10-30-00/model.checkpoint'",
+  
+  "play_num_simulations": 100,
+  "_play_num_simulations說明": "對弈時的 MCTS 模擬次數，越高越強 (建議 100-800)",
+  
+  "play_temperature": 0,
+  "_play_temperature說明": "對弈時的溫度參數，0=選最佳動作，>0=增加隨機性",
+  
+  "_分隔線": "════════════════════════════════════════",
+  "_訓練配置開始": "↓ 以下為訓練相關參數 ↓",
+  
+  "_基礎設定": "==================",
+
+  "seed": 0,
+  "max_num_gpus": 1,
+
+  "_遊戲設定": "==================",
+  "board_size": 9,  
+  "stacked_observations": 0,
+  "_stacked_observations說明": "堆疊的歷史觀察數量，0=只用當前狀態",
+  
+  "muzero_player": "random",
+  
+  "opponent": "random",
+  "_opponent說明": "評估時的對手類型 (random/expert/None)，不影響訓練",
+
+  "_自我對弈": "==================",
+  "num_workers": 2,
+  "_num_workers說明": "同時進行自我對弈的線程數，越多越快但佔用更多記憶體",
+  
+  "selfplay_on_gpu": false,
+  "_selfplay_on_gpu說明": "是否在 GPU 上進行自我對弈，建議開啟",
+  
+  "max_moves": 81,
+  "_max_moves說明": "單局最大步數，通常設為 board_size²",
+  
+  "num_simulations": 150,
+  "_num_simulations說明": "MCTS 每步的模擬次數，越高越強但越慢 (建議 50-800)",
+  
+  "discount": 1,
+  "_discount說明": "未來獎勵的折扣因子，1=不折扣 (五子棋用 1)",
+  
+  "temperature_threshold": null,
+  "_temperature_threshold說明": "前 N 步使用溫度採樣，之後選最佳動作，null=始終用溫度函數",
+  
+  "root_dirichlet_alpha": 0.3,
+  "_root_dirichlet_alpha說明": "根節點的 Dirichlet 噪音參數，增加探索性",
+  
+  "root_exploration_fraction": 0.25,
+  "_root_exploration_fraction說明": "根節點噪音的混合比例 (0-1)",
+  
+  "pb_c_base": 19652,
+  "pb_c_init": 1.25,
+  "_UCB說明": "UCB 公式的常數，控制探索/利用平衡",
+
+  "_神經網路架構": "==================",
+  "network": "resnet",
+  "_network說明": "網路類型: resnet (推薦) 或 fullyconnected",
+  
+  "support_size": 10,
+  "_support_size說明": "價值編碼範圍 [-support_size, +support_size]",
+  
+  "_ResNet設定": "----------",
+  "downsample": false,
+  "_downsample說明": "是否降採樣 (false/CNN/resnet)，小棋盤用 false",
+  
+  "blocks": 4,
+  "_blocks說明": "ResNet 區塊數量，越多越強但越慢 (建議 4-20)",
+  
+  "channels": 64,
+  "_channels說明": "ResNet 通道數，越多越強但佔記憶體 (建議 64-256)",
+  
+  "reduced_channels_reward": 8,
+  "reduced_channels_value": 8,
+  "reduced_channels_policy": 16,
+  "_reduced_channels說明": "各個頭的通道數 (較小以節省計算)",
+  
+  "resnet_fc_reward_layers": [64],
+  "resnet_fc_value_layers": [64],
+  "resnet_fc_policy_layers": [64],
+  "_resnet_fc說明": "各個頭的全連接層，例如 [64] 表示一層 64 神經元",
+  
+  "_全連接網路設定": "----------",
+  "encoding_size": 32,
+  "fc_representation_layers": [],
+  "fc_dynamics_layers": [64],
+  "fc_reward_layers": [64],
+  "fc_value_layers": [],
+  "fc_policy_layers": [],
+  "_fc說明": "僅當 network=fullyconnected 時使用",
+
+  "_訓練參數": "==================",
+  "save_model": true,
+  "_save_model說明": "是否保存模型檢查點",
+  
+  "training_steps": 10000,
+  "_training_steps說明": "總訓練步數，一步 = 更新一次權重",
+  
+  "batch_size": 32,
+  "_batch_size說明": "每次訓練的批次大小，越大越穩定但需更多記憶體",
+  
+  "checkpoint_interval": 50,
+  "_checkpoint_interval說明": "每 N 個訓練步數保存一次檢查點",
+  
+  "value_loss_weight": 1,
+  "_value_loss_weight說明": "價值損失的權重，論文建議 0.25",
+  
+  "_優化器設定": "----------",
+  "optimizer": "Adam",
+  "_optimizer說明": "優化器類型: Adam (推薦) 或 SGD",
+  
+  "weight_decay": 0.0001,
+  "_weight_decay說明": "L2 正則化係數，防止過擬合",
+  
+  "momentum": 0.9,
+  "_momentum說明": "動量參數，僅 SGD 使用",
+  
+  "_學習率調度": "----------",
+  "lr_init": 0.002,
+  "_lr_init說明": "初始學習率 (建議 0.001-0.01)",
+  
+  "lr_decay_rate": 0.9,
+  "_lr_decay_rate說明": "學習率衰減率，1=不衰減",
+  
+  "lr_decay_steps": 10000,
+  "_lr_decay_steps說明": "每 N 步衰減一次學習率",
+
+  "_早停機制": "==================",
+  "early_stop_patience": null,
+  "_early_stop_patience說明": "無改善就停止的步數，null=禁用早停 (建議 100-500)",
+  
+  "early_stop_threshold": 0.0001,
+  "_early_stop_threshold說明": "判定為改善的最小損失下降量",
+
+  "_重放緩衝區": "==================",
+  "replay_buffer_size": 10000,
+  "_replay_buffer_size說明": "保留的遊戲數量，越大越多樣但佔記憶體",
+  
+  "num_unroll_steps": 81,
+  "_num_unroll_steps說明": "每個樣本展開的步數，通常 = max_moves",
+  
+  "td_steps": 81,
+  "_td_steps說明": "TD 目標的前瞻步數，通常 = max_moves",
+  
+  "PER": true,
+  "_PER說明": "是否使用優先經驗回放 (建議開啟)",
+  
+  "PER_alpha": 0.5,
+  "_PER_alpha說明": "優先級強度 (0=均勻, 1=完全優先, 論文建議 1)",
+  
+  "use_last_model_value": false,
+  "_use_last_model_value說明": "是否用最新模型重新計算價值",
+  
+  "reanalyse_on_gpu": true,
+  "_reanalyse_on_gpu說明": "是否在 GPU 上進行重新分析",
+
+  "_比例調整": "==================",
+  "self_play_delay": 0,
+  "_self_play_delay說明": "每局遊戲後的延遲秒數",
+  
+  "training_delay": 0,
+  "_training_delay說明": "每個訓練步驟後的延遲秒數",
+  
+  "ratio": 1,
+  "_ratio說明": "訓練步數/自我對弈步數的比率，null=不限制"
+}
